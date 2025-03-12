@@ -32,7 +32,7 @@ class RSVD_CM_AdamW(Optimizer):
         self.rank=rank
         super().__init__(params, defaults)
 
-def step(self, closure=None):
+    def step(self, closure=None):
         """Performs a single optimization step.
         Arguments:
             closure (callable, optional): A closure that reevaluates the model
@@ -68,7 +68,7 @@ def step(self, closure=None):
                     state["sq_v"] = torch.zeros((self.rank, p.data.shape[1]), dtype=p.data.dtype, device=p.data.device)
                     state["sq_s"] = torch.zeros((self.rank), dtype=p.data.dtype, device=p.data.device)
 
-                m_u, m_v, m_s, sq_u, sq_v, sq_s = state["m_u"], state["m_v"], state["m_s"], state["sq_u"], state["sq_v">
+                m_u, m_v, m_s, sq_u, sq_v, sq_s = state["m_u"], state["m_v"], state["m_s"], state["sq_u"], state["sq_v"]
 
                 beta1, beta2 = group["betas"]
 
@@ -86,7 +86,7 @@ def step(self, closure=None):
                     bias_correction2 = 1.0 - beta2 ** state["step"]
                     step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
 
-                p.data.addcdiv_(-step_size, beta1 * m_u @ torch.diag(m_s) @ m_v + (1-beta1) * grad, (beta2 * sq_u @ tor>).sqrt().add_(group["eps"]))
+                p.data.addcdiv_(-step_size, beta1 * m_u @ torch.diag(m_s) @ m_v + (1-beta1) * grad, (beta2 * sq_u @ torch.diag(sq_s) @ sq_v + (1-beta2) * grad * grad).sqrt().add_(group["eps"]))
 
                 m_u, m_s, m_v = randomized_svd(Y1, self.rank)
                 sq_u, sq_s, sq_v = randomized_svd(Y2, self.rank)
