@@ -68,7 +68,7 @@ class RSVD_CM_AdamW(Optimizer):
                     state["sq_v"] = torch.zeros((self.rank, p.data.shape[1]), dtype=p.data.dtype, device=p.data.device)
                     state["sq_s"] = torch.zeros((self.rank), dtype=p.data.dtype, device=p.data.device)
 
-                m_u, m_v, m_s, sq_u, sq_v, sq_s = state["m_u"], state["m_v"], state["m_s"], state["sq_u"], state["sq_v"]
+                m_u, m_v, m_s, sq_u, sq_v, sq_s = state["m_u"], state["m_v"], state["m_s"], state["sq_u"], state["sq_v"], state["sq_s"]
 
                 beta1, beta2 = group["betas"]
 
