@@ -105,5 +105,85 @@ class RSVD_CM_AdamW(Optimizer):
                     print(torch.cuda.memory_summary(device=p.data.device, abbreviated=False))
         return loss
 
+class RSVD_AdamW(Optimizer):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01, correct_bias=True, rank=1, T=100):
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, correct_bias=correct_bias)
+        self.rank=rank
+        super().__init__(params, defaults)
+
+
+
+    def step(self, closure=None):
+        """Performs a single optimization step.
+        Arguments:
+            closure (callable, optional): A closure that reevaluates the model
+                and returns the loss.
+        """
+        loss = None
+        if closure is not None:
+            loss = closure()
+        
+        for group in self.param_groups:
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+                grad = p.grad.data
+
+                if grad.dim() != 2:
+                    continue
+                if grad.is_sparse:
+                    raise RuntimeError("Adam does not support sparse gradients, please consider SparseAdam instead")
                 
+
+                state = self.state[p]
+
+                # State initialization
+                if len(state) == 0:
+                    state["step"] = 0
+                    # Exponential moving average of gradient values
+                    state["exp_avg"] = torch.zeros((self.rank, p.data.shape[1]), dtype=p.data.dtype, device=p.data.device)
+                    state["exp_avg_sq"] = torch.zeros((self.rank, p.data.shape[1]), dtype=p.data.dtype, device=p.data.device)
+                    state["projector"] = torch.zeros((p.data.shape[0], self.rank), dtype=p.data.dtype, device=p.data.device)
+
+                exp_avg, exp_avg_sq = state["exp_avg"], state["exp_avg_sq"]
+                beta1, beta2 = group["betas"]
+
+                state["step"] += 1
+
+                if(state["step"]%T==1):                
+
+                    u, s, v=torch.linalg.svd(grad.float(), full_matrices=False)
+                    state["projector"] = u[:, :self.rank].bfloat16()
+
+                Projector = state["projector"]
+                R_=Projector.T @ grad
+
+
+
+                # Decay the first and second moment running average coefficient
+                # In-place operations to update the averages at the same time
+                exp_avg.mul_(beta1).add_(R_, alpha=1.0 - beta1)
+                exp_avg_sq.mul_(beta2).addcmul_(R_, R_, value=1.0 - beta2)
+                denom = exp_avg_sq.sqrt().add_(group["eps"])
+
+                step_size = group["lr"]
+                if 'correct_bias' in group and group["correct_bias"]:  # No bias correction for Bert
+                    bias_correction1 = 1.0 - beta1 ** state["step"]
+                    bias_correction2 = 1.0 - beta2 ** state["step"]
+                    step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
+
+                grad_d=torch.div(exp_avg, denom)
+                u_grad_d= -step_size * Projector @ grad_d
+
+                p.data.add_(u_grad_d)
+
+
+                if group["weight_decay"] > 0.0:
+                    p.data.add_(p.data, alpha=-group["lr"] * group["weight_decay"])
+
+
+
+
+        return loss
+
               
