@@ -17,7 +17,6 @@ from lion_pytorch import Lion
 from Mylog import TitledLog
 import Preprocessing
 from Preprocessing import load_meta_math, MetaMathQA100k_Preprocessor
-#from optim_AdamW_RSVD_CM import AdamW_RSVD_CM
 from new_optim import RSVD_CM_AdamW
 
 import wandb
@@ -37,7 +36,7 @@ class CustomTrainer(Trainer):
         super().__init__(*args, **kwargs)
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
-        self.optimizer = AdamW_RSVD_CM(self.model.named_parameters(), lr=self.args.learning_rate, betas=(0.9, 0.999), w>
+        self.optimizer = RSVD_CM_AdamW(model.parameters(), lr=2e-5, rank=8)
         self.create_scheduler(num_training_steps=num_training_steps, optimizer=self.optimizer)
 
 def main():
@@ -58,7 +57,8 @@ def main():
   if tokenizer.pad_token is None:
       tokenizer.pad_token = tokenizer.eos_token
 
-  model = transformers.LlamaForCausalLM.from_pretrained(model_name, max_length=1024,attn_implementation="flash_attentio>  model.config.use_cache = False
+  model = transformers.LlamaForCausalLM.from_pretrained(model_name, max_length=1024,attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}) 
+  model.config.use_cache = False
   model.gradient_checkpointing_enable()
 
   with TitledLog("load datasets and dataloaders", log_fn=log.info):
@@ -109,10 +109,8 @@ def main():
         deepspeed="./deepspeed_zero2.json" if world_size > 1 else None,
     )
 
-  my_optimizer = RSVD_CM_AdamW(model.parameters(), lr=2e-5, rank=8)
-  from torch.optim.lr_scheduler import CosineAnnealingLR
-  my_lr_scheduler = CosineAnnealingLR(my_optimizer, T_max=50, eta_min=1e-6)
-  trainer = Trainer(
+
+  trainer = CustomTrainer(
       model=model,
       args=train_args,
       train_dataset=datasets["train"],
