@@ -199,7 +199,7 @@ class GaLore(Optimizer):
         return loss
 
 class MLorc_AdamW_perlayer(Optimizer):
-    def __init__(self, model, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01, correct_bias=True, rank=1):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01, correct_bias=True, rank=1):
         if lr < 0.0:
             raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
         if not 0.0 <= betas[0] < 1.0:
@@ -209,30 +209,7 @@ class MLorc_AdamW_perlayer(Optimizer):
         if not 0.0 <= eps:
             raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(eps))
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, correct_bias=correct_bias)
-        self.rank = rank
-        self.model = model
-        self.m_u = {}
-        self.m_v = {}
-        self.m_s = {}
-        self.sq_u = {}
-        self.sq_v = {}
-        self.sq_s = {}
-        self.iter = {}
-        for n, p in self.model.named_parameters():
-            state = self.state[p]
-            state["step"] = 0
-            # Exponential moving average of gradient values
-            state["m_u"] = torch.zeros((p.data.shape[0], self.rank), dtype=p.data.dtype, device=p.data.device)
-            state["m_v"] = torch.zeros((self.rank, p.data.shape[1]), dtype=p.data.dtype, device=p.data.device)
-            state["m_s"] = torch.zeros((self.rank), dtype=p.data.dtype, device=p.data.device)
-            # Exponential moving average of squared gradient values
-            state["sq_u"] = torch.zeros((p.data.shape[0], self.rank), dtype=p.data.dtype, device=p.data.device)
-            state["sq_v"] = torch.zeros((self.rank, p.data.shape[1]), dtype=p.data.dtype, device=p.data.device)
-            state["sq_s"] = torch.zeros((self.rank), dtype=p.data.dtype, device=p.data.device)
-                
-            if p.requires_grad:
-                p.register_hook(self.step)
-                    
+        self.rank=rank
         super().__init__(params, defaults)
 
     def step(self, closure=None):
@@ -245,45 +222,75 @@ class MLorc_AdamW_perlayer(Optimizer):
         if closure is not None:
             loss = closure()
 
-        for p in self.params:
-            if p.requires_grad and p.grad is not None and p.grad.data.dim()==2:
-                    
+        for group in self.param_groups:
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
                 grad = p.grad.data
-                p.grad = None
+
+                if p.grad.data.dim() != 2:
+                    continue
                 if p.grad.data.is_sparse:
                     raise RuntimeError("Adam does not support sparse gradients, please consider SparseAdam instead")
 
+                
+                    
+                def grad_hook(grad, param=p, p_state=state):
+                    if 'correct_bias' in group and group["correct_bias"]:
+                        self._update_param(param, grad, beta=group["betas"], lr=group["lr"], eps=group["eps"], weight_decay=group["weight_decay"], bias_correction=True)
+                    else:
+                        self._update_param(param, grad, beta=group["betas"], lr=group["lr"], eps=group["eps"], weight_decay=group["weight_decay"], bias_correction=False)
+                    # 清空梯度以释放内存
+                    param.grad = None
+                    return grad  # 返回原始梯度以避免修改计算图
 
-                state = self.state[p]
+                p.grad.register_hook(grad_hook)
 
-                m_u, m_v, m_s, sq_u, sq_v, sq_s = state["m_u"], state["m_v"], state["m_s"], state["sq_u"], state["sq_v"], state["sq_s"]
+         return loss
+        
+    def _update_param(self, param, grad, beta, lr, eps, weight_decay, bias_correction):
+        
+        state = self.state[param]
+        # State initialization
+        if len(state) == 0:
+            state["step"] = 0
+            # Exponential moving average of gradient values
+            state["m_u"] = torch.zeros((param.data.shape[0], self.rank), dtype=param.data.dtype, device=param.data.device)
+            state["m_v"] = torch.zeros((self.rank, param.data.shape[1]), dtype=param.data.dtype, device=param.data.device)
+            state["m_s"] = torch.zeros((self.rank), dtype=param.data.dtype, device=param.data.device)
+            # Exponential moving average of squared gradient values
+            state["sq_u"] = torch.zeros((param.data.shape[0], self.rank), dtype=param.data.dtype, device=param.data.device)
+            state["sq_v"] = torch.zeros((self.rank, param.data.shape[1]), dtype=param.data.dtype, device=param.data.device)
+            state["sq_s"] = torch.zeros((self.rank), dtype=param.data.dtype, device=param.data.device)
 
-                beta1, beta2 = group["betas"]
+        m_u, m_v, m_s, sq_u, sq_v, sq_s = state["m_u"], state["m_v"], state["m_s"], state["sq_u"], state["sq_v"], state["sq_s"]
 
-                state["step"] += 1
+        beta1, beta2 = beta
 
-                m=beta1 * m_u @ torch.diag(m_s) @ m_v + (1-beta1) * grad
-                sq=beta2 * sq_u @ torch.diag(sq_s) @ sq_v + (1-beta2) * grad * grad
+        state["step"] += 1
 
-                m_u, m_s, m_v = randomized_svd(m, self.rank)
-                sq_u, sq_s, sq_v = randomized_svd(sq, self.rank)
+        m=beta1 * m_u @ torch.diag(m_s) @ m_v + (1-beta1) * grad
+        sq=beta2 * sq_u @ torch.diag(sq_s) @ sq_v + (1-beta2) * grad * grad
 
-
-
-                # Decay the first and second moment running average coefficient
-                # In-place operations to update the averages at the same time
-                denom = sq.sqrt().add_(group["eps"])
-
-                step_size = group["lr"]
-                if 'correct_bias' in group and group["correct_bias"]:  # No bias correction for Bert
-                    bias_correction1 = 1.0 - beta1 ** state["step"]
-                    bias_correction2 = 1.0 - beta2 ** state["step"]
-                    step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
-
-                p.data.addcdiv_(-step_size, m, denom)
+        m_u, m_s, m_v = randomized_svd(m, self.rank)
+        sq_u, sq_s, sq_v = randomized_svd(sq, self.rank)
 
 
-                # Just adding the square of the weights to the loss function is *not*
+
+        # Decay the first and second moment running average coefficient
+        # In-place operations to update the averages at the same time
+        denom = sq.sqrt().add_(eps)
+
+        step_size = lr
+        if bias_correction==True:  # No bias correction for Bert
+            bias_correction1 = 1.0 - beta1 ** state["step"]
+            bias_correction2 = 1.0 - beta2 ** state["step"]
+            step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
+
+        param.data.addcdiv_(-step_size, m, denom)
+
+
+                 # Just adding the square of the weights to the loss function is *not*
                 # the correct way of using L2 regularization/weight decay with Adam,
                 # since that will interact with the m and v parameters in strange ways.
                 #
@@ -291,8 +298,7 @@ class MLorc_AdamW_perlayer(Optimizer):
                 # with the m/v parameters. This is equivalent to adding the square
                 # of the weights to the loss with plain (non-momentum) SGD.
                 # Add weight decay at the end (fixed version)
-                if group["weight_decay"] > 0.0:
-                    p.data.add_(p.data, alpha=-group["lr"] * group["weight_decay"])
+        if group["weight_decay"] > 0.0:
+            param.data.add_(param.data, alpha=-lr * weight_decay)
 
-        return loss
-
+       
