@@ -153,7 +153,7 @@ def main():
                   "epoch": epoch + (global_step + 1) / len(train_loader)
               }
             
-              if torch.distributed.get_rank() == 0:
+              if local_rank == 0:
                   wandb.log(log_data)
             
               progress_bar.set_postfix(loss=loss.item(), lr=log_data["lr"])
@@ -175,7 +175,7 @@ def main():
       eval_loss /= len(eval_loader)
     
       # 记录评估结果
-      if torch.distributed.get_rank() == 0:
+      if local_rank == 0:
           wandb.log({"eval_loss": eval_loss, "epoch": epoch + 1})
           print(f"Epoch {epoch+1} Evaluation Loss: {eval_loss:.4f}")
   if local_rank == 0:
