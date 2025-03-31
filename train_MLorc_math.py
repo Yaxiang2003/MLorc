@@ -48,7 +48,8 @@ def main():
   local_rank = int(os.getenv("LOCAL_RANK", "0"))
   world_size = int(os.getenv("WORLD_SIZE", "1"))
   device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+  torch.cuda.manual_seed_all(0)
+    
   if local_rank == 0:
         wandb.init(
             project='LLAMA-2-7B',
