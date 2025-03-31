@@ -188,8 +188,6 @@ def main():
             )
             predictions = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
             pred = []
-            if(i<=5):
-                print('Example of Model output:', predictions[0])
             for prediction in predictions:
                 pred.append(extract_num(prediction))
             all_predictions.extend(pred)
