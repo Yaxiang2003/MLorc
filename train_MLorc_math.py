@@ -34,7 +34,7 @@ config = {
     "rank":4,
     "per_device_eval_batch_size": 1,
     "learning_rate": 4e-5,
-    "optimizer": "MLorc_AdamW"
+    "optimizer": "MLorc_AdamW",
     "layer_wise_flag": False,
     "weight_decay": 0,
     "warmup_ratio": 0.03,
@@ -52,7 +52,7 @@ def main():
   if local_rank == 0:
         wandb.init(
             project='LLAMA-2-7B',
-            name=f"llama-2-7b_math_{config["optimizer"]}",
+            name=f"llama-2-7b_math_{config['optimizer']}",
             group='llama-2-7B-Math',
         )
 
