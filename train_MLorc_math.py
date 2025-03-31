@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from datasets import DatasetDict, load_dataset
 import transformers
-from transformers import default_data_collator, get_cosine_schedule_with_warmup
+from transformers import default_data_collator, get_linear_schedule_with_warmup
 from huggingface_hub import login, notebook_login
 from tqdm import tqdm
 
@@ -120,7 +120,7 @@ def main():
       scheduler_dict = {}
       for p in model.parameters():
           if p.requires_grad:
-              scheduler_dict[p] = get_cosine_schedule_with_warmup(optimizer_dict[p], num_warmup_steps=warmup_steps, num_training_steps=total_steps)
+              scheduler_dict[p] = get_linear_schedule_with_warmup(optimizer_dict[p], num_warmup_steps=warmup_steps, num_training_steps=total_steps)
 
       def optimizer_hook(p):
           if p.grad is None:
@@ -156,7 +156,7 @@ def main():
               )
       else:
           raise RuntimeError("Incorrect optimizer config")
-      scheduler = get_cosine_schedule_with_warmup(
+      scheduler = get_linear_schedule_with_warmup(
           optimizer,
           num_warmup_steps=warmup_steps,
           num_training_steps=total_steps
