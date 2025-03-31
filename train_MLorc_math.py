@@ -1,7 +1,5 @@
 import os
-import argparse
 import logging
-from pathlib import Path
 import wandb
 import math
 
@@ -110,7 +108,14 @@ def main():
       optimizer_dict = {}
       for p in model.parameters():
           if p.requires_grad:
-              optimizer_dict[p] = RSVD_CM_AdamW([p], lr=config["learning_rate"], weight_decay=config["weight_decay"], rank=4)
+              if config["optimizer"]== "MLorc_AdamW":
+                  optimizer_dict[p] = MLorc_AdamW([p], lr=config["learning_rate"], weight_decay=config["weight_decay"], rank=config["rank"])
+              elif config["optimizer"]== "MLorc_Lion":
+                  optimizer_dict[p] = MLorc_Lion([p], lr=config["learning_rate"], weight_decay=config["weight_decay"], rank=config["rank"])
+              elif config["optimizer"]== "Galore":
+                  optimizer_dict[p] = GaLore([p], lr=config["learning_rate"], weight_decay=config["weight_decay"], rank=config["rank"])
+              else:
+                  raise RuntimeError("Incorrect optimizer config")
       scheduler_dict = {}
       for p in model.parameters():
           if p.requires_grad:
@@ -148,12 +153,13 @@ def main():
               weight_decay=config["weight_decay"],
               rank=config["rank"]
               )
- 
-  scheduler = get_cosine_schedule_with_warmup(
-    optimizer,
-    num_warmup_steps=warmup_steps,
-    num_training_steps=total_steps
-  )
+      else:
+          raise RuntimeError("Incorrect optimizer config")
+      scheduler = get_cosine_schedule_with_warmup(
+          optimizer,
+          num_warmup_steps=warmup_steps,
+          num_training_steps=total_steps
+          )
 
   # 训练循环
   model.train()
