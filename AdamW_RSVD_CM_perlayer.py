@@ -47,6 +47,8 @@ config = {
 def main():
   local_rank = int(os.getenv("LOCAL_RANK", "0"))
   world_size = int(os.getenv("WORLD_SIZE", "1"))
+  device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
   if local_rank == 0:
         wandb.init(
             project='LLAMA-2-7B',
@@ -61,7 +63,7 @@ def main():
       model.resize_token_embeddings(len(tokenizer))
   if tokenizer.pad_token is None:
       tokenizer.pad_token = tokenizer.eos_token
-
+  
   model = transformers.LlamaForCausalLM.from_pretrained(model_name, max_length=1024,attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}) 
   model.config.use_cache = False
   model.gradient_checkpointing_enable()
@@ -179,8 +181,8 @@ def main():
           wandb.log({"eval_loss": eval_loss, "epoch": epoch + 1})
           print(f"Epoch {epoch+1} Evaluation Loss: {eval_loss:.4f}")
   if local_rank == 0:
-    model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Adam_RSVD_CM/lr_3e-5')
-    tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Adam_RSVD_CM/lr_3e-5')
+    model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Adam_RSVD_CM_perlayer/lr_3e-5')
+    tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Adam_RSVD_CM_perlayer/lr_3e-5')
 
     wandb.finish()
 
