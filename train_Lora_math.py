@@ -59,7 +59,7 @@ def main():
   if local_rank == 0:
         wandb.init(
             project='LLAMA-2-7B',
-            name=f"llama-2-7b_math_lora_{config['method']}",
+            name=f"llama-2-7b_math_lora_{config['method']_{config['optimizer']}}",
             group='llama-2-7B-Math',
         )
 
