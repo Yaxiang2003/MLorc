@@ -126,7 +126,7 @@ def main():
     model = transformers.LlamaForCausalLM.from_pretrained(f'./logs/transformers/llama-2-7b/math/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}', max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
     model.config.use_cache = True
     model.gradient_checkpointing_disable()
-    tokenizer = transformers.LlamaTokenizer.from_pretrained('./logs/transformers/llama-2-7b/math/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}', padding_side="left")
+    tokenizer = transformers.LlamaTokenizer.from_pretrained(f'./logs/transformers/llama-2-7b/math/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}', padding_side="left")
 
     if tokenizer.eos_token is None:
         tokenizer.add_special_tokens({"eos_token": "</s>"})
