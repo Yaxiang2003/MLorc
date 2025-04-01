@@ -23,6 +23,10 @@ from transformers import default_data_collator
 import copy
 from fractions import Fraction
 
+config = {
+    "learning_rate": 5e-5,
+    "optimizer": "MLorc_Lion",
+}
 def extract_gsm_num(text):
     # Regex pattern to find the number following '####'
     pattern = r'####\s*(\d+)'
@@ -48,7 +52,7 @@ def is_number(s):
         unicodedata.numeric(s)
         return True
     except (TypeError, ValueError):
-       pass
+        pass
     return False
 
 def extract_num(completion):
@@ -107,12 +111,9 @@ def compute_accuracy(predictions, references):
     correct = sum([pred == ref for pred, ref in zip(predictions, references)])
     return correct / len(predictions)
 
+
 @torch.inference_mode()
 def main():
-
-    method = "rslora-pro"
-    current_timestamp = time.time()
-    print("starting_time", current_timestamp)
 
     local_rank = int(os.environ['LOCAL_RANK'])
     torch.cuda.set_device(local_rank)
@@ -122,15 +123,17 @@ def main():
 
     # Step 1: load model
     #model_name = "meta-llama/Llama-2-7b-chat-hf"
-    model = transformers.LlamaForCausalLM.from_pretrained('./logs/transformers/llama-2-7b/math/Full_FT/2epoch', max_len>    model.config.use_cache = True
+    model = transformers.LlamaForCausalLM.from_pretrained(f'./logs/transformers/llama-2-7b/math/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}', max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
+    model.config.use_cache = True
     model.gradient_checkpointing_disable()
-    tokenizer = transformers.LlamaTokenizer.from_pretrained('./logs/transformers/llama-2-7b/math/Full_FT/2epoch', paddi>
+    tokenizer = transformers.LlamaTokenizer.from_pretrained('./logs/transformers/llama-2-7b/math/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}', padding_side="left")
 
     if tokenizer.eos_token is None:
         tokenizer.add_special_tokens({"eos_token": "</s>"})
         model.resize_token_embeddings(len(tokenizer))
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
 
     model.to(local_rank)
     model.eval()
@@ -155,6 +158,7 @@ def main():
         )
         inputs["labels"] = examples["y"]
         return inputs
+
     dataset = dataset.map(
         preprocess,
         batched=True,
