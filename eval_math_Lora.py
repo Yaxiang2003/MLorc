@@ -22,7 +22,7 @@ import transformers
 from transformers import default_data_collator
 import copy
 from fractions import Fraction
-from peft import PeftModel, PeftConfig
+from peft import PeftModel
 
 config = {
     "learning_rate": 1e-3,
@@ -129,7 +129,9 @@ def main():
     model.config.use_cache = True
     model.gradient_checkpointing_disable()
     tokenizer = transformers.LlamaTokenizer.from_pretrained(model_name, padding_side="left")
-
+    model = PeftModel.from_pretrained(model, f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+    model.merge_and_unload()
+    
     if tokenizer.eos_token is None:
         tokenizer.add_special_tokens({"eos_token": "</s>"})
         model.resize_token_embeddings(len(tokenizer))
