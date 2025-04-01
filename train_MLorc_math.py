@@ -6,6 +6,8 @@ import math
 import torch
 from torch import Tensor, nn
 from torch.utils.data import DataLoader
+from torch.optim import AdamW
+from lion_pytorch import Lion
 
 from datasets import DatasetDict, load_dataset
 import transformers
@@ -116,6 +118,10 @@ def main():
                   optimizer_dict[p] = MLorc_Lion([p], lr=config["learning_rate"], weight_decay=config["weight_decay"], rank=config["rank"])
               elif config["optimizer"]== "Galore":
                   optimizer_dict[p] = GaLore([p], lr=config["learning_rate"], weight_decay=config["weight_decay"], rank=config["rank"], T=config["GaLore_T"])
+              elif config["optimizer"]== "AdamW":
+                  optimizer_dict[p] = AdamW([p], lr=config["learning_rate"], weight_decay=config["weight_decay"])
+              elif config["optimizer"]== "Lion":
+                  optimizer_dict[p] = Lion([p], lr=config["learning_rate"], betas=(0.95, 0.98), weight_decay=config["weight_decay"])
               else:
                   raise RuntimeError("Incorrect optimizer config")
       scheduler_dict = {}
@@ -155,6 +161,19 @@ def main():
               weight_decay=config["weight_decay"],
               rank=config["rank"],
               T=config["GaLore_T"]
+              )
+      elif config["optimizer"]== "AdamW":
+          optimizer = AdamW(
+              model.parameters(), 
+              lr=config["learning_rate"], 
+              weight_decay=config["weight_decay"]
+              )
+      elif config["optimizer"]== "Lion":
+          optimizer = Lion(
+              model.parameters(), 
+              lr=config["learning_rate"], 
+              betas=(0.95, 0.98),
+              weight_decay=config["weight_decay"]
               )
       else:
           raise RuntimeError("Incorrect optimizer config")
