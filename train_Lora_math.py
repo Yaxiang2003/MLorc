@@ -7,6 +7,7 @@ import torch
 from torch import Tensor, nn
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
+import torch.optim as optim
 
 from datasets import DatasetDict, load_dataset
 import transformers
@@ -16,6 +17,7 @@ from tqdm import tqdm
 
 import peft
 from peft import LoraConfig
+from peft.optimizers import create_loraplus_optimizer
 
 from Mylog import TitledLog
 import Preprocessing
@@ -37,8 +39,10 @@ config = {
     "per_device_train_batch_size":32,
     "rank":4,
     "per_device_eval_batch_size": 1,
-    "learning_rate": 4e-5,
-    "method": "default",
+    "learning_rate": 1e-3,
+    "method": "default", # "default", "pissa" or "dora"
+    "optimizer": "default", # "default" or "loraplus"
+    "loraplus_lr_ratio": 4,
     "weight_decay": 0,
     "warmup_ratio": 0.03,
     "bf16": True,
@@ -55,7 +59,7 @@ def main():
   if local_rank == 0:
         wandb.init(
             project='LLAMA-2-7B',
-            name=f"llama-2-7b_math_{config['optimizer']}",
+            name=f"llama-2-7b_math_lora_{config['method']}",
             group='llama-2-7B-Math',
         )
 
@@ -70,7 +74,41 @@ def main():
   model = transformers.LlamaForCausalLM.from_pretrained(model_name, max_length=1024,attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)})
   model.config.use_cache = False
   model.gradient_checkpointing_enable()
-
+  if config["method"] == "default":
+      lora_config = LoraConfig(
+        r=config["rank"],
+        lora_alpha=16,
+        lora_dropout=0.1,
+        bias="none",
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
+        task_type="CAUSAL_LM",
+        )
+  elif config["method"] == "pissa":
+      lora_config = LoraConfig(
+        init_lora_weights="pissa_niter_4",
+        r=config["rank"],
+        lora_alpha=16,
+        lora_dropout=0.0,
+        bias="none",
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
+        task_type="CAUSAL_LM",
+        )
+  elif config["method"] == "dora":
+      lora_config = LoraConfig(
+        use_dora=True, 
+        runtime_config=LoraRuntimeConfig(ephemeral_gpu_offload=True),
+        r=config["rank"],
+        lora_alpha=16,
+        lora_dropout=0.0,
+        bias="none",
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
+        task_type="CAUSAL_LM",
+        )
+  else:
+      raise RuntimeError("Incorrect lora method config")
+      
+  model = peft.get_peft_model(model, lora_config)
+    
   with TitledLog("load datasets and dataloaders", log_fn=log.info):
         datasets = load_meta_math()
 
@@ -107,7 +145,13 @@ def main():
   total_steps = len(train_loader) * config["num_train_epochs"]
   warmup_steps = int(total_steps * config["warmup_ratio"])
 
-  optimizer = AdamW(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"])
+  if config["optimizer"] == "default":
+      optimizer = AdamW(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"])
+  elif config["optimizer"] == "loraplus":
+      optimizer = create_loraplus_optimizer(model=model, optimizer_cls= optim.AdamW, lr=config["learning_rate"], loraplus_lr_ratio=config["loraplus_lr_ratio"], weight_decay=config["weight_decay"])
+  else:
+      raise RuntimeError("Incorrect optimizer config")
+      
   scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
 
   # 训练循环
@@ -169,9 +213,12 @@ def main():
 
 
   if local_rank == 0:
-      model.save_pretrained(f'./logs/transformers/llama-2-7b/math/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
-      tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
-
+      if config["method"] == "pissa":
+          peft_model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+      else:
+          model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+          tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+          
       wandb.finish()
 
 if __name__ == "__main__":
