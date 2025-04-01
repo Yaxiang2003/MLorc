@@ -41,7 +41,6 @@ config = {
     "layer_wise_flag": False,
     "weight_decay": 0,
     "warmup_ratio": 0.03,
-    "lr_scheduler_type": "cosine",
     "bf16": True,
     "logging_steps": 1,
     "eval_steps": -1,  # 每个 epoch 结束后评估
