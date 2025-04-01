@@ -206,6 +206,8 @@ def main():
         print(f"Test samples {len(all_predictions)}")
         print(f"Test samples {len(all_references)}")
         print(f"Final Accuracy: {100. * accuracy}")
+        print("optimizer:", config["optimizer"])
+        print("lr:", config["learning_rate"])
 
     dist.destroy_process_group()
 
