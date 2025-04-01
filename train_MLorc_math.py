@@ -35,6 +35,7 @@ config = {
     "per_device_eval_batch_size": 1,
     "learning_rate": 4e-5,
     "optimizer": "MLorc_AdamW",
+    “GaLore_T”: "300",
     "layer_wise_flag": False,
     "weight_decay": 0,
     "warmup_ratio": 0.03,
@@ -114,7 +115,7 @@ def main():
               elif config["optimizer"]== "MLorc_Lion":
                   optimizer_dict[p] = MLorc_Lion([p], lr=config["learning_rate"], weight_decay=config["weight_decay"], rank=config["rank"])
               elif config["optimizer"]== "Galore":
-                  optimizer_dict[p] = GaLore([p], lr=config["learning_rate"], weight_decay=config["weight_decay"], rank=config["rank"])
+                  optimizer_dict[p] = GaLore([p], lr=config["learning_rate"], weight_decay=config["weight_decay"], rank=config["rank"], T=config["GaLore_T"])
               else:
                   raise RuntimeError("Incorrect optimizer config")
       scheduler_dict = {}
@@ -152,7 +153,8 @@ def main():
               model.parameters(),
               lr=config["learning_rate"],
               weight_decay=config["weight_decay"],
-              rank=config["rank"]
+              rank=config["rank"],
+              T=config["GaLore_T"]
               )
       else:
           raise RuntimeError("Incorrect optimizer config")
