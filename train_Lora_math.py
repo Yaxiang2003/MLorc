@@ -16,7 +16,7 @@ from huggingface_hub import login, notebook_login
 from tqdm import tqdm
 
 import peft
-from peft import LoraConfig, LoraRuntimeConfig
+from peft import LoraConfig, LoraRuntimeConfig, PeftModel
 from peft.optimizers import create_loraplus_optimizer
 
 from Mylog import TitledLog
