@@ -16,7 +16,7 @@ from huggingface_hub import login, notebook_login
 from tqdm import tqdm
 
 import peft
-from peft import LoraConfig, LoraRuntimeConfig, PeftModel
+from peft import LoraConfig, LoraRuntimeConfig
 from peft.optimizers import create_loraplus_optimizer
 
 from Mylog import TitledLog
@@ -130,94 +130,55 @@ def main():
             desc="Running tokenizer on dataset",
         )
 
-  train_loader = DataLoader(
-    datasets["train"],
-    batch_size=config["per_device_train_batch_size"],
-    collate_fn=default_data_collator,
-    shuffle=True
+  train_args = TrainingArguments(
+        do_train=True,
+        num_train_epochs=config["num_train_epochs"],
+        per_device_train_batch_size=config["per_device_train_batch_size"],
+        logging_steps=config["logging_steps"],
+        bf16=config["bf16"],
+        warmup_ratio=config["warmup_ratio"],
+        lr_scheduler_type="linear",
+        report_to="wandb" if local_rank == 0 else None,
+        label_names=[
+            "labels"
+        ],
+        do_eval=True,
+        per_device_eval_batch_size=config["per_device_eval_batch_size"],
+        evaluation_strategy="steps",
+        eval_steps=config["eval_steps"],
+        save_strategy="no",
+    )
+
+  class CustomTrainer(Trainer):
+    def create_optimizer(self):
+        if config["optimizer"] == "default":
+            self.optimizer = AdamW(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"])
+        elif config["optimizer"] == "loraplus":
+            optimizer = create_loraplus_optimizer(model=model, optimizer_cls= optim.AdamW, lr=config["learning_rate"], loraplus_lr_ratio=config["loraplus_lr_ratio"], weight_decay=config["weight_decay"])
+        else:
+            raise RuntimeError("Incorrect optimizer config")
+        return self.optimizer
+
+    def create_scheduler(self, num_training_steps: int, optimizer=None):
+        """
+        仍然使用 Trainer 默认的 lr_scheduler
+        """
+        if self.lr_scheduler is None:
+            self.lr_scheduler = super().create_scheduler(num_training_steps, self.optimizer)
+        return self.lr_scheduler
+        
+  trainer = CustomTrainer(
+      model=model,
+      args=train_args,
+      train_dataset=datasets["train"],
+      eval_dataset=datasets["eval"],
+      data_collator=default_data_collator,
   )
-
-  eval_loader = DataLoader(
-    datasets["eval"],
-    batch_size=config["per_device_eval_batch_size"],
-    collate_fn=default_data_collator
-  )
-  total_steps = len(train_loader) * config["num_train_epochs"]
-  warmup_steps = int(total_steps * config["warmup_ratio"])
-
-  if config["optimizer"] == "default":
-      optimizer = AdamW(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"])
-  elif config["optimizer"] == "loraplus":
-      optimizer = create_loraplus_optimizer(model=model, optimizer_cls= optim.AdamW, lr=config["learning_rate"], loraplus_lr_ratio=config["loraplus_lr_ratio"], weight_decay=config["weight_decay"])
-  else:
-      raise RuntimeError("Incorrect optimizer config")
-      
-  scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps)
-
-  # 训练循环
-  model.train()
-  global_step = 0
-
-  for epoch in range(config["num_train_epochs"]):
-      # 训练阶段
-      progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}")
-      for batch in progress_bar:
-          # 将数据移至设备
-          batch = {k: v.to(device) for k, v in batch.items()}
-
-          # 混合精度前向传播
-          with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=config["bf16"]):
-              outputs = model(**batch)
-              loss = outputs.loss
-
-          # 反向传播
-          loss.backward()
-          # 参数更新
-          optimizer.step()
-          optimizer.zero_grad()
-          scheduler.step()
-
-          # 日志记录
-          if global_step % config["logging_steps"] == 0:
-              log_data = {
-                  "loss": loss.item(),
-                  "lr": scheduler.get_last_lr()[0],
-                  "epoch": epoch + (global_step + 1) / len(train_loader)
-              }
-
-              if local_rank == 0:
-                  wandb.log(log_data)
-
-              progress_bar.set_postfix(loss=loss.item(), lr=log_data["lr"])
-
-          global_step += 1
-
-      # 评估阶段（每个 epoch 结束后）
-      model.eval()
-      eval_loss = 0
-
-      with torch.no_grad():
-          for batch in tqdm(eval_loader, desc="Evaluating"):
-              batch = {k: v.to(device) for k, v in batch.items()}
-
-              with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=config["bf16"]):
-                  outputs = model(**batch)
-                  eval_loss += outputs.loss.item()
-
-      eval_loss /= len(eval_loader)
-
-      # 记录评估结果
-      if local_rank == 0:
-          wandb.log({"eval_loss": eval_loss, "epoch": epoch + 1})
-          print(f"Epoch {epoch+1} Evaluation Loss: {eval_loss:.4f}")
-
-
+  trainer.train()
+    
   if local_rank == 0:
-      if config["method"] == "pissa":
-          peft_model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
-      else:
-          model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
-          tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+      model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+      tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
           
       wandb.finish()
 
