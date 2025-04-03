@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from Mylog import TitledLog
 import Preprocessing
-from Preprocessing import load_meta_math, CodeFeedback100k_Preprocessor
+from Preprocessing import load_codefeedback, CodeFeedback100k_Preprocessor
 from optim import MLorc_AdamW, MLorc_Lion, GaLore
 
 
@@ -55,8 +55,8 @@ def main():
   if local_rank == 0:
         wandb.init(
             project='LLAMA-2-7B',
-            name=f"llama-2-7b_math_{config['optimizer']}",
-            group='llama-2-7B-Math',
+            name=f"llama-2-7b_code_{config['optimizer']}",
+            group='llama-2-7B-Code',
         )
 
   model_name = "meta-llama/Llama-2-7b-chat-hf"
@@ -72,15 +72,15 @@ def main():
   model.gradient_checkpointing_enable()
 
   with TitledLog("load datasets and dataloaders", log_fn=log.info):
-        datasets = load_meta_math()
-
-        preprocessor = MetaMathQA100k_Preprocessor(
+      datasets = load_codefeedback()
+        
+      preprocessor = CodeFeedback100k_Preprocessor(
             tokenizer=tokenizer,
             tokenizer_kwargs={
                 "padding": "max_length",
                 "truncation": True,
                 "return_tensors": "pt",
-                "max_length": 512
+                "max_length": 1024
             },
         )
 
@@ -242,8 +242,8 @@ def main():
 
 
   if local_rank == 0:
-      model.save_pretrained(f'./logs/transformers/llama-2-7b/math/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
-      tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+      model.save_pretrained(f'./logs/transformers/llama-2-7b/code/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+      tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/code/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
 
       wandb.finish()
 
