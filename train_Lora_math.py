@@ -12,6 +12,8 @@ import torch.optim as optim
 from datasets import DatasetDict, load_dataset
 import transformers
 from transformers import default_data_collator, get_linear_schedule_with_warmup
+from transformers import TrainingArguments, Trainer
+
 from huggingface_hub import login, notebook_login
 from tqdm import tqdm
 
@@ -59,7 +61,7 @@ def main():
   if local_rank == 0:
         wandb.init(
             project='LLAMA-2-7B',
-            name=f"llama-2-7b_math_lora_{config['method']_{config['optimizer']}}",
+            name=f"llama-2-7b_math_lora_{config['method']}_{config['optimizer']}",
             group='llama-2-7B-Math',
         )
 
@@ -131,6 +133,9 @@ def main():
         )
 
   train_args = TrainingArguments(
+        output_dir="./llama-2-7b-metamathqa100k",
+        run_name = "llama2_7b_math_experiment",
+        logging_dir="./llama-2-7b-metamathqa100k_logs",
         do_train=True,
         num_train_epochs=config["num_train_epochs"],
         per_device_train_batch_size=config["per_device_train_batch_size"],
@@ -154,7 +159,7 @@ def main():
         if config["optimizer"] == "default":
             self.optimizer = AdamW(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"])
         elif config["optimizer"] == "loraplus":
-            optimizer = create_loraplus_optimizer(model=model, optimizer_cls= optim.AdamW, lr=config["learning_rate"], loraplus_lr_ratio=config["loraplus_lr_ratio"], weight_decay=config["weight_decay"])
+            self.optimizer = create_loraplus_optimizer(model=model, optimizer_cls= optim.AdamW, lr=config["learning_rate"], loraplus_lr_ratio=config["loraplus_lr_ratio"], weight_decay=config["weight_decay"])
         else:
             raise RuntimeError("Incorrect optimizer config")
         return self.optimizer
