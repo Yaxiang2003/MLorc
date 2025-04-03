@@ -227,7 +227,7 @@ def load_codefeedback(max_tokens=1024):
         bar.set_description(f"ok: {ok}/{total}")
         ok += 1
         processed_sample = preprocess(sample)
-        if count < 22000:
+        if count < 20000:
             train_samples.append(processed_sample)
         elif 20000 <= count < 22000:
             eval_samples.append(processed_sample)
