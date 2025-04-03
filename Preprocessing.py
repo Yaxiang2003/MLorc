@@ -89,9 +89,6 @@ class MetaMathQA100k_Preprocessor(DatasetPreprocessor):
     # [TODO]
 
     def __call__(self, example):
-        """
-        Preprocess the CoLA dataset into a text-to-text format.
-        """
         if isinstance(example["x"], str):
             # not batched
 #             input_text, target_text = self.preprocess(
@@ -167,4 +164,83 @@ def load_meta_math(max_tokens=1024):
         "eval": eval_samples,
     })
 
+    return datasets
+
+class CodeFeedback100k_Preprocessor(DatasetPreprocessor):
+
+    def __call__(self, example):
+        if isinstance(example["x"], str):
+            # not batched
+            raise NotImplementedError
+    
+        else:
+            combined_text = [(x + " " + y + self.tokenizer.eos_token) for (x, y) in zip(example["x"], example["y"])]
+            encodings = self.tokenizer(combined_text, return_tensors="pt", padding=True, truncation=True, max_length=1024)
+
+            labels = encodings["input_ids"].clone()
+            input_text_length = [
+                len(self.tokenizer(example["x"][i], return_tensors="pt")["input_ids"][0])
+                for i in range(len(example["x"]))
+            ]
+            for i, l in enumerate(input_text_length):
+                labels[i, :l] = -100
+            labels[encodings["attention_mask"] == 0] = -100
+            
+            results = {
+                "input_ids": encodings["input_ids"],
+                "attention_mask": encodings["attention_mask"],
+                "labels": labels,
+            }
+
+            return results
+
+@cache_to_disk("data_cache")
+def load_codefeedback(max_tokens=1024):
+    dataset = dataset = load_dataset("m-a-p/CodeFeedback-Filtered-Instruction",  split="train")
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+    def preprocess(data):
+        y = data['answer']
+        y = "```".join(y.split("```")[:2]) + "```" # only keep the first code block
+        return {
+            "x": template_wo_input.format(
+                instruction=data['query']
+            ),
+            "y": y,
+        }
+    train_samples = []
+    eval_samples = []
+    count = 0
+    dataset.shuffle(seed=42)
+    from tqdm import tqdm
+    bar = tqdm(dataset, total=22000)
+    total = 0
+    ok = 0
+    for sample in dataset:
+        total += 1
+        temp = preprocess(sample)
+        if "```" not in sample['answer']:
+            continue
+        if len(tokenizer(temp['x']+' '+temp['y'])['input_ids']) >= max_tokens:
+            continue
+        bar.update(1)
+        bar.set_description(f"ok: {ok}/{total}")
+        ok += 1
+        processed_sample = preprocess(sample)
+        if count < 22000:
+            train_samples.append(processed_sample)
+        elif 20000 <= count < 22000:
+            eval_samples.append(processed_sample)
+        elif count >= 22000:  # Stop processing after collecting enough samples
+            break
+        count += 1
+        
+    # convert to hf dataset
+    train_samples = Dataset.from_list(train_samples)
+    eval_samples = Dataset.from_list(eval_samples)
+    datasets = DatasetDict({
+        "train": train_samples,
+        "eval": eval_samples,
+    })
+    
     return datasets
