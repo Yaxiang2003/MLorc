@@ -175,7 +175,7 @@ class CodeFeedback100k_Preprocessor(DatasetPreprocessor):
     
         else:
             combined_text = [(x + " " + y + self.tokenizer.eos_token) for (x, y) in zip(example["x"], example["y"])]
-            encodings = self.tokenizer(combined_text, return_tensors="pt", padding=True, truncation=True, max_length=1024)
+            encodings = self.tokenizer(combined_text, return_tensors="pt", padding="max_length", truncation=True, max_length=1024)
 
             labels = encodings["input_ids"].clone()
             input_text_length = [
