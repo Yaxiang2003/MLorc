@@ -1,9 +1,9 @@
-
 import os
 import sys
 import re
 import math
 import time
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -13,21 +13,20 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 from human_eval.data import write_jsonl, read_problems
+from human_eval.evaluation import evaluate_functional_correctness
 
 from huggingface_hub import login, notebook_login
 from tqdm import tqdm
 from typing import List
-from einops import rearrange
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 import accelerate
 import transformers
 from transformers import default_data_collator
 import copy
-from fractions import Fraction
 
 config = {
-    "learning_rate": 5e-5,
-    "optimizer": "MLorc_Lion",
+    "learning_rate": 0,
+    "optimizer": "None",
 }
 
 def post_process(text):
@@ -97,10 +96,6 @@ def gather_from_all_processes(data):
     # Flatten the list of lists
     return [item for sublist in gathered_data for item in sublist]
 
-def compute_accuracy(predictions, references):
-    """Compute accuracy by comparing predictions and references."""
-    correct = sum([pred == ref for pred, ref in zip(predictions, references)])
-    return correct / len(predictions)
 
 
 @torch.inference_mode()
@@ -182,20 +177,20 @@ def main():
             )
             predictions = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
             pred = []
-            for prediction in predictions:
-                pred.append(extract_num(prediction))
-            all_predictions.extend(pred)
-            all_references.extend(batch["labels"].tolist())
-
+            for pred_text in predictions:
+                pred.append(post_process(pred_text))
+            for task_id, pred_text in zip(batch["task_ids"], pred):
+                all_predictions.append({"task_id": f"HumanEval/{task_id}", "completion": pred_text})
 
     all_predictions = gather_from_all_processes(all_predictions)
-    all_references = gather_from_all_processes(all_references)
 
     if dist.get_rank() == 0:
-        accuracy = compute_accuracy(all_predictions, all_references)
         print(f"Test samples {len(all_predictions)}")
-        print(f"Test samples {len(all_references)}")
-        print(f"Final Accuracy: {100. * accuracy}")
+        target_name = f"humaneval_samples_{config['optimizer']}_lr_{config['learning_rate']}.jsonl".replace("/", '_')
+        write_jsonl(target_name, all_predictions)
+        print(f"sample in {target_name}")
+        results = evaluate_functional_correctness(sample_file=target_name)
+        print(f"Pass@1: {results['pass@1']:.3f}")
         print("optimizer:", config["optimizer"])
         print("lr:", config["learning_rate"])
 
