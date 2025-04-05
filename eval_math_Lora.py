@@ -130,7 +130,8 @@ def main():
     model.gradient_checkpointing_disable()
     tokenizer = transformers.LlamaTokenizer.from_pretrained(model_name, padding_side="left")
     model = PeftModel.from_pretrained(model, f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
-    model.merge_and_unload()
+    #model.merge_and_unload()
+    model = model.to(dtype=torch.bfloat16)
     
     if tokenizer.eos_token is None:
         tokenizer.add_special_tokens({"eos_token": "</s>"})
