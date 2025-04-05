@@ -108,8 +108,11 @@ def main():
     print("Environment initialized successfully!Number of gpu is:", torch.cuda.device_count())
 
     # Step 1: load model
-    model_name = "meta-llama/Llama-2-7b-chat-hf"
-    model = transformers.LlamaForCausalLM.from_pretrained(model_name, max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
+    if config["optimizer"] == "None":
+        model_name = "meta-llama/Llama-2-7b-chat-hf"
+        model = transformers.LlamaForCausalLM.from_pretrained(model_name, max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
+    else:
+        model = transformers.LlamaForCausalLM.from_pretrained(f'./logs/transformers/llama-2-7b/code/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}', max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
     model.config.use_cache = True
     model.gradient_checkpointing_disable()
     tokenizer = transformers.LlamaTokenizer.from_pretrained(model_name, padding_side="left")
