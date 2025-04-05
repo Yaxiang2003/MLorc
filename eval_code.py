@@ -111,11 +111,13 @@ def main():
     if config["optimizer"] == "None":
         model_name = "meta-llama/Llama-2-7b-chat-hf"
         model = transformers.LlamaForCausalLM.from_pretrained(model_name, max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
+        tokenizer = transformers.LlamaTokenizer.from_pretrained(model_name, padding_side="left")
     else:
         model = transformers.LlamaForCausalLM.from_pretrained(f'./logs/transformers/llama-2-7b/code/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}', max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
+        tokenizer = transformers.LlamaTokenizer.from_pretrained(f'./logs/transformers/llama-2-7b/code/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}', padding_side="left")
     model.config.use_cache = True
     model.gradient_checkpointing_disable()
-    tokenizer = transformers.LlamaTokenizer.from_pretrained(model_name, padding_side="left")
+    
 
     if tokenizer.eos_token is None:
         tokenizer.add_special_tokens({"eos_token": "</s>"})
@@ -178,7 +180,7 @@ def main():
                 top_p=0.95,
                 temperature=0.8,
             )
-            predictions = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
+            predictions = tokenizer.batch_decode(outputs.sequences[:, 768:], skip_special_tokens=True)
             pred = []
             for pred_text in predictions:
                 pred.append(post_process(pred_text))
