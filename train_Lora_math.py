@@ -182,8 +182,13 @@ def main():
   trainer.train()
     
   if local_rank == 0:
-      model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
-      tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+      if config["method"] == "pissa":
+          model.peft_config["default"].init_lora_weights = True
+          model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}',path_initial_model_for_weight_conversion="pissa_init_dir")
+          tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+      else:  
+          model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+          tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
           
       wandb.finish()
 
