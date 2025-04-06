@@ -124,16 +124,15 @@ def main():
     print("Environment initialized successfully!Number of gpu is:", torch.cuda.device_count())
 
     # Step 1: load model
+    model_name = "meta-llama/Llama-2-7b-chat-hf"
     if config["method"] == "pissa":
         model = transformers.LlamaForCausalLM.from_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}/pissa_residual_model', max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
     else:
-        model_name = "meta-llama/Llama-2-7b-chat-hf"
         model = transformers.LlamaForCausalLM.from_pretrained(model_name, max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
     model.config.use_cache = True
     model.gradient_checkpointing_disable()
     tokenizer = transformers.LlamaTokenizer.from_pretrained(model_name, padding_side="left")
     model = PeftModel.from_pretrained(model, f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
-    #model.merge_and_unload()
     model = model.to(dtype=torch.bfloat16)
     
     if tokenizer.eos_token is None:
