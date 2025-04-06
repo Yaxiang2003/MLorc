@@ -15,7 +15,6 @@ from torch.utils.data import DataLoader, DistributedSampler
 from huggingface_hub import login, notebook_login
 from tqdm import tqdm
 from typing import List
-from einops import rearrange
 from datasets import load_dataset
 import accelerate
 import transformers
