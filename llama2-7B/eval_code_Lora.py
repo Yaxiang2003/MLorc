@@ -31,69 +31,56 @@ config = {
     "method": "default",
     "optimizer": "default",
 }
-def extract_gsm_num(text):
-    # Regex pattern to find the number following '####'
-    pattern = r'####\s*(\d+)'
-    # Using re.search to find the first match
-    match = re.search(pattern, text)
-    if match:
-        result = match.group(1)
-    else:
-        result = ""
-    try:
-        return int(result.replace(",", ""))
-    except:
-        return 0
-
-def is_number(s):
-    try:
-        float(s)
-        return True
-    except ValueError:
-        pass
-    try:
-        import unicodedata
-        unicodedata.numeric(s)
-        return True
-    except (TypeError, ValueError):
-        pass
-    return False
-
-def extract_num(completion):
-    text = completion.split('The answer is: ')
-    if len(text) > 1:
-        extract_ans = text[-1].strip()
-        match = re.search(r'[\-+]?\d*[\.,/]?\d+', extract_ans)
+def post_process(text):
+    text = text.replace("```", "")
+    text = text.replace("\t", "    ")
+    text = re.sub(r'(""".*?"""|\'\'\'.*?\'\'\')', '', text, flags=re.DOTALL)
+    text = "\n".join([ll.rstrip() for ll in text.splitlines() if ll.strip()])
+    lines = text.split("\n")
+    spaces_for_each_line = []
+    for line in lines:
+        match = re.match(r'^( *)', line)
         if match:
-            if '/' in match.group():
-                denominator = match.group().split('/')[1]
-                numerator = match.group().split('/')[0]
-                if is_number(denominator) == True and is_number(numerator) == True:
-                    if denominator == '0':
-                        return round(float(numerator.replace(',', '')))
-                    else:
-                        frac = Fraction(match.group().replace(',', ''))
-                        num_numerator = frac.numerator
-                        num_denominator = frac.denominator
-                        return round(float(num_numerator / num_denominator))
-                else:
-                    return None
-            else:
-                if float(match.group().replace(',', '')) == float('inf'):
-                    return None
-                return round(float(match.group().replace(',', '')))
+            leading_spaces = len(match.group(1))
+            spaces_for_each_line.append(leading_spaces)
+    try:
+        def_line = [i for i, line in enumerate(lines) if "def" in line][0]
+        def_line_space = spaces_for_each_line[def_line]
+    except:
+        print("No def line found")
+        print(text)
+        def_line_space = 0
+    rank_unique_spaces = sorted(list(set(spaces_for_each_line)))
+    indentation_level = {}
+    i = 0
+    for space in rank_unique_spaces:
+        if space <= def_line_space:
+            indentation_level[space] = 0
         else:
-            return None
-    else:
-        return None
+            i += 1
+            indentation_level[space] = i
+    new_lines = []
+    for line, space in zip(lines, spaces_for_each_line):
+        new_lines.append("    " * indentation_level[space] + line.lstrip())
+    return "\n".join(new_lines)
 
-template_wo_input = '''Below is an instruction that describes a task. Write a response that appropriately completes the request. Make sure prefix your final answer with 'The answer is: '.
+ALPACA_PREFIX_TEMPLATE_MD = """Below is an instruction that describes a task.\n Write a response that appropriately completes the request.
 
 ### Instruction:
-{instruction}
+Complete the following Python code: 
+Notes: respond with the entire complete function definition
+do not add any comments, be as concise in your code as possible
+use only built-in libraries, assume no additional imports other than those provided (if any)
+use `    ` (4 spaces) for each level of indentation
+
+code:
+```python
+{PROMPT}
+```
 
 ### Response:
-'''
+```python
+"""
 
 def split_dataset(dataset, rank, world_size):
     total_size = len(dataset)
@@ -110,11 +97,6 @@ def gather_from_all_processes(data):
     # Flatten the list of lists
     return [item for sublist in gathered_data for item in sublist]
 
-def compute_accuracy(predictions, references):
-    """Compute accuracy by comparing predictions and references."""
-    correct = sum([pred == ref for pred, ref in zip(predictions, references)])
-    return correct / len(predictions)
-
 
 @torch.inference_mode()
 def main():
@@ -128,13 +110,13 @@ def main():
     # Step 1: load model
     model_name = "meta-llama/Llama-2-7b-chat-hf"
     if config["method"] == "pissa":
-        model = transformers.LlamaForCausalLM.from_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}/pissa_residual_model', max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
+        model = transformers.LlamaForCausalLM.from_pretrained(f'./logs/transformers/llama-2-7b/code/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}/pissa_residual_model', max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
     else:
         model = transformers.LlamaForCausalLM.from_pretrained(model_name, max_length=1024, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16, device_map={"": int(os.environ.get("LOCAL_RANK") or 0)}, use_auth_token=True)
     model.config.use_cache = True
     model.gradient_checkpointing_disable()
     tokenizer = transformers.LlamaTokenizer.from_pretrained(model_name, padding_side="left")
-    model = PeftModel.from_pretrained(model, f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+    model = PeftModel.from_pretrained(model, f'./logs/transformers/llama-2-7b/code/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
     model = model.to(dtype=torch.bfloat16)
     
     if tokenizer.eos_token is None:
