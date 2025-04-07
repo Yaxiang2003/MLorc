@@ -61,8 +61,8 @@ def main():
   if local_rank == 0:
         wandb.init(
             project='LLAMA-2-7B',
-            name=f"llama-2-7b_math_lora_{config['method']}_{config['optimizer']}",
-            group='llama-2-7B-Math',
+            name=f"llama-2-7b_code_lora_{config['method']}_{config['optimizer']}",
+            group='llama-2-7B-Code',
         )
 
   model_name = "meta-llama/Llama-2-7b-chat-hf"
@@ -112,19 +112,19 @@ def main():
   model = peft.get_peft_model(model, lora_config)
     
   with TitledLog("load datasets and dataloaders", log_fn=log.info):
-        datasets = load_meta_math()
-
-        preprocessor = MetaMathQA100k_Preprocessor(
+      datasets = load_codefeedback()
+        
+      preprocessor = CodeFeedback100k_Preprocessor(
             tokenizer=tokenizer,
             tokenizer_kwargs={
                 "padding": "max_length",
                 "truncation": True,
                 "return_tensors": "pt",
-                "max_length": 512
+                "max_length": 1024
             },
         )
-
-        datasets = datasets.map(
+      
+      datasets = datasets.map(
             preprocessor,
             batched=True,
             batch_size=1000,
@@ -132,10 +132,11 @@ def main():
             desc="Running tokenizer on dataset",
         )
 
+
   train_args = TrainingArguments(
-        output_dir="./llama-2-7b-metamathqa100k",
-        run_name = "llama2_7b_math_experiment",
-        logging_dir="./llama-2-7b-metamathqa100k_logs",
+        output_dir="./llama-2-7b-codefeedback100k",
+        run_name = "llama2_7b_code_experiment",
+        logging_dir="./llama-2-7b-codefeedback100k_logs",
         do_train=True,
         num_train_epochs=config["num_train_epochs"],
         per_device_train_batch_size=config["per_device_train_batch_size"],
@@ -184,11 +185,13 @@ def main():
   if local_rank == 0:
       if config["method"] == "pissa":
           model.peft_config["default"].init_lora_weights = True
-          model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}',path_initial_model_for_weight_conversion="pissa_init_dir")
-          tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+          model.save_pretrained(f'./logs/transformers/llama-2-7b/code/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+          model = model.unload()
+          model.save_pretrained(f'./logs/transformers/llama-2-7b/code/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}/pissa_residual_model')
+          tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/code/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
       else:  
-          model.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
-          tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/math/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+          model.save_pretrained(f'./logs/transformers/llama-2-7b/code/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
+          tokenizer.save_pretrained(f'./logs/transformers/llama-2-7b/code/Lora_adapter/method_{config["method"]}/optimizer_{config["optimizer"]}/lr_{config["learning_rate"]}')
           
       wandb.finish()
 
