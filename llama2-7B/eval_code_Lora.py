@@ -163,7 +163,6 @@ def main():
 
     # Step 3: evaluation on test dataset
     all_predictions = []
-    all_references = []
 
     model.eval()
     with torch.no_grad():
@@ -191,13 +190,14 @@ def main():
 
 
     all_predictions = gather_from_all_processes(all_predictions)
-    all_references = gather_from_all_processes(all_references)
 
     if dist.get_rank() == 0:
-        accuracy = compute_accuracy(all_predictions, all_references)
         print(f"Test samples {len(all_predictions)}")
-        print(f"Test samples {len(all_references)}")
-        print(f"Final Accuracy: {100. * accuracy}")
+        target_name = f"humaneval_samples_method_{config['method']}_{config['optimizer']}_lr_{config['learning_rate']}.jsonl".replace("/", '_')
+        write_jsonl(target_name, all_predictions)
+        print(f"sample in {target_name}")
+        results = evaluate_functional_correctness(sample_file=target_name)
+        print(f"Pass@1: {results['pass@1']:.3f}")
         print("method:", config["method"])
         print("optimizer:", config["optimizer"])
         print("lr:", config["learning_rate"])
