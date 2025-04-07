@@ -149,6 +149,7 @@ def main():
         ],
         do_eval=True,
         per_device_eval_batch_size=config["per_device_eval_batch_size"],
+        ddp_find_unused_parameters=False,
         evaluation_strategy="steps",
         eval_steps=config["eval_steps"],
         save_strategy="no",
