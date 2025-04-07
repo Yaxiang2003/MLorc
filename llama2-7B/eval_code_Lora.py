@@ -130,36 +130,36 @@ def main():
     model.eval()
 
     # Step 2: load dataset
-    dataset = load_dataset("gsm8k", "main")['test']
-
+    dataset = read_problems()
+    dataset = [v for (k, v) in dataset.items()]
+    
+    dataset = split_dataset(dataset, local_rank, world_size)
+    dataset = Dataset.from_list(dataset)
+    
     def preprocess(examples):
-        examples["x"] = []
-        examples["y"] = []
-        for question, answer in zip(examples['question'], examples['answer']):
-            examples["x"].append(template_wo_input.format(instruction=question) + " ")
-            examples["y"].append(extract_gsm_num(answer))
-
-        inputs = tokenizer(
-            examples['x'],
-            return_tensors="pt",
-            max_length=768,
-            padding="max_length",
-            truncation=True,
-            return_token_type_ids=False,
-        )
-        inputs["labels"] = examples["y"]
-        return inputs
+        task_ids = [int(task_id.split("/")[-1]) for task_id in examples["task_id"]]
+        input_texts = [(ALPACA_PREFIX_TEMPLATE_MD.format(PROMPT=prompt) + " ") for prompt in examples["prompt"]]
+        
+        encodings = tokenizer(input_texts, return_tensors="pt", padding="max_length", truncation=True, max_length=768)
+        
+        results = {
+            "input_ids": encodings["input_ids"],
+            "attention_mask": encodings["attention_mask"],
+            "task_ids": task_ids,
+        }
+        return results
 
     dataset = dataset.map(
         preprocess,
         batched=True,
         batch_size=1000,
-        num_proc=1
+        num_proc=1,
+        desc="Running tokenizer on dataset",
+        remove_columns=["entry_point", "canonical_solution", "test", "prompt"],
     )
+    
+    dataloader = DataLoader(dataset, batch_size=8, shuffle=False, collate_fn=default_data_collator)
 
-    dataset = split_dataset(dataset, local_rank, world_size)
-
-    dataloader = DataLoader(dataset, batch_size=8, collate_fn=default_data_collator)
 
     # Step 3: evaluation on test dataset
     all_predictions = []
@@ -179,7 +179,7 @@ def main():
                 max_new_tokens=512,
                 eos_token_id=tokenizer.eos_token_id,
                 top_p=0.95,
-                temperature=0.8,
+                temperature=0.1,
             )
             predictions = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
             pred = []
