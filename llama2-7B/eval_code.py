@@ -178,7 +178,7 @@ def main():
                 max_new_tokens=512,
                 eos_token_id=tokenizer.eos_token_id,
                 top_p=0.95,
-                temperature=0.8,
+                temperature=0.1,
             )
             predictions = tokenizer.batch_decode(outputs.sequences[:, 768:], skip_special_tokens=True)
             pred = []
