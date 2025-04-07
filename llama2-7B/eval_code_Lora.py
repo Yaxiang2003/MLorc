@@ -18,7 +18,7 @@ from human_eval.evaluation import evaluate_functional_correctness
 from huggingface_hub import login, notebook_login
 from tqdm import tqdm
 from typing import List
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 import accelerate
 import transformers
 from transformers import default_data_collator
