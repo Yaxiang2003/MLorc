@@ -162,7 +162,6 @@ def main():
 
     # Step 3: evaluation on test dataset
     all_predictions = []
-    all_references = []
 
     model.eval()
     with torch.no_grad():
