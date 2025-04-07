@@ -11,6 +11,8 @@ import torch.nn.functional as F
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
+from human_eval.data import write_jsonl, read_problems
+from human_eval.evaluation import evaluate_functional_correctness
 
 from huggingface_hub import login, notebook_login
 from tqdm import tqdm
