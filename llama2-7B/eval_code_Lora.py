@@ -181,12 +181,13 @@ def main():
                 top_p=0.95,
                 temperature=0.1,
             )
-            predictions = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
+            predictions = tokenizer.batch_decode(outputs.sequences[:, 768:], skip_special_tokens=True)
             pred = []
-            for prediction in predictions:
-                pred.append(extract_num(prediction))
-            all_predictions.extend(pred)
-            all_references.extend(batch["labels"].tolist())
+            for pred_text in predictions:
+                pred.append(post_process(pred_text))
+            for task_id, pred_text in zip(batch["task_ids"], pred):
+                all_predictions.append({"task_id": f"HumanEval/{task_id}", "completion": pred_text})
+
 
 
     all_predictions = gather_from_all_processes(all_predictions)
