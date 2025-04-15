@@ -4,6 +4,28 @@ from torch.optim.optimizer import Optimizer, required
 import torch.nn as nn
 import torch
 
+def nmf(A, U, S, V, rank, max_iter=2, epsilon=1e-12):
+    
+    device = A.device
+    W_init = U @ torch.diag(S.sqrt())
+    H_init = torch.diag(S.sqrt()) @ V.T
+
+    for i in range(max_iter):
+        # 更新 H（固定 W）
+        WT_W = W.T @ W + epsilon * torch.eye(rank, device=device)  # 加 epsilon 防止奇异
+        WT_A = W.T @ A
+        H = torch.linalg.solve(WT_W, WT_A)
+        H = torch.clamp(H, min=0)  # 保证非负
+
+        # 更新 W（固定 H）
+        HH_T = H @ H.T + epsilon * torch.eye(rank, device=device)
+        AH_T = A @ H.T
+        W = torch.linalg.solve(HH_T.T, AH_T.T).T
+        W = torch.clamp(W, min=0)
+
+    S = torch.ones(rank, dtype=A.dtype, device=device)
+    return W, S, H
+
 def randomized_svd(A, rank):
 
     m, n = A.shape
