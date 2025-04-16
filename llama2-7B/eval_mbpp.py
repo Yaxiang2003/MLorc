@@ -139,6 +139,7 @@ def main():
     model.eval()
 
     # Step 2: load dataset
+    mbpp = load_dataset("mbpp", split="test[11:51]")
     dataset = load_dataset("mbpp", split="test[11:51]")
     total = len(dataset)
     
@@ -191,8 +192,10 @@ def main():
                 temperature=0.1,
             )
             predictions = tokenizer.batch_decode(outputs.sequences[:, 768:], skip_special_tokens=True)
+            for task_id, pred in zip(batch["task_ids"], predictions):
+                pred_text = post_process(pred)
+                all_predictions.append({"task_id": task_id, "gen_code": pred_text})
             for pred_text in predictions :
-                all_predictions.append(post_process(pred_text))
                 passed = evaluate_generated_code(gen_code, test_list)
                 correct += int(passed)
 
