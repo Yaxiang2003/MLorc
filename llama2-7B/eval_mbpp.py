@@ -191,8 +191,8 @@ def main():
                 temperature=0.1,
             )
             predictions = tokenizer.batch_decode(outputs.sequences[:, 768:], skip_special_tokens=True)
-            for pred_text in zip(batch["test_list"], predictions):
-                gen_code = post_process(pred_text)
+            for pred_text in predictions :
+                all_predictions.append(post_process(pred_text))
                 passed = evaluate_generated_code(gen_code, test_list)
                 correct += int(passed)
 
