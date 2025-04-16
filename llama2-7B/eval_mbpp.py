@@ -12,8 +12,6 @@ import torch.nn.functional as F
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
-from human_eval.data import write_jsonl, read_problems
-from human_eval.evaluation import evaluate_functional_correctness
 
 from huggingface_hub import login, notebook_login
 from tqdm import tqdm
@@ -147,7 +145,7 @@ def main():
     
     def preprocess(examples):
         #task_ids = [int(task_id.split("/")[-1]) for task_id in examples["task_id"]]
-        input_texts = [(ALPACA_PREFIX_TEMPLATE_MD.format(PROMPT=prompt) + " ") for prompt in examples["prompt"]]
+        input_texts = [(ALPACA_PREFIX_TEMPLATE_MD.format(PROMPT=prompt) + " ") for prompt in examples["text"]]
         
         encodings = tokenizer(input_texts, return_tensors="pt", padding="max_length", truncation=True, max_length=768)
         
@@ -175,20 +173,7 @@ def main():
     model.eval()
     correct = 0
     total = len(mbpp)
-
-for i, sample in enumerate(mbpp):
-    prompt = sample["prompt"]
-    test_list = sample["test_list"]
-    print(f"\n🧪 Sample {i+1}/{total}")
-    print(f"Prompt:\n{prompt}")
     
-    gen_code = generate_code(prompt)
-    print(f"\n🔢 Generated Code:\n{gen_code}")
-
-    passed = evaluate_generated_code(gen_code, test_list)
-    print(f"✅ Passed: {passed}")
-
-    correct += int(passed)
 
     with torch.no_grad():
         i = 0
@@ -206,15 +191,14 @@ for i, sample in enumerate(mbpp):
                 temperature=0.1,
             )
             predictions = tokenizer.batch_decode(outputs.sequences[:, 768:], skip_special_tokens=True)
-            for pred_text in predictions:
-                all_predictions.append(post_process(pred_text))
-            
+            for test_list, pred_text in zip(batch["test_list"], predictions):
+                gen_code = post_process(pred_text)
+                passed = evaluate_generated_code(gen_code, test_list)
+                correct += int(passed)
 
     
     if dist.get_rank() == 0:
         print(f"Test samples {len(all_predictions)}")
-        for i, sample in enumerate(mbpp):
-            
         accuracy = correct / total
         print(f"\n Final Accuracy (pass@1): {accuracy:.2%}")
         print("optimizer:", config["optimizer"])
