@@ -139,9 +139,9 @@ def main():
     model.eval()
 
     # Step 2: load dataset
-    mbpp = load_dataset("mbpp", split="test[11:510]")
+    dataset = load_dataset("mbpp", split="test[11:51]")
+    total = len(dataset)
     
-    dataset = split_dataset(mbpp, local_rank, world_size)
     
     def preprocess(examples):
         #task_ids = [int(task_id.split("/")[-1]) for task_id in examples["task_id"]]
@@ -152,8 +152,8 @@ def main():
         results = {
             "input_ids": encodings["input_ids"],
             "attention_mask": encodings["attention_mask"],
-            "test_list": example["test_list"],
-            #"task_ids": task_ids,
+            #"test_list": examples["test_list"],
+            "task_ids": examples["task_id"],
         }
         return results
 
@@ -164,7 +164,8 @@ def main():
         num_proc=1,
         desc="Running tokenizer on dataset",
     )
-    
+
+    dataset = split_dataset(dataset, local_rank, world_size)
     dataloader = DataLoader(dataset, batch_size=8, shuffle=False, collate_fn=default_data_collator)
 
     # Step 3: evaluation on test dataset
@@ -172,7 +173,6 @@ def main():
 
     model.eval()
     correct = 0
-    total = len(mbpp)
     
 
     with torch.no_grad():
@@ -191,7 +191,7 @@ def main():
                 temperature=0.1,
             )
             predictions = tokenizer.batch_decode(outputs.sequences[:, 768:], skip_special_tokens=True)
-            for test_list, pred_text in zip(batch["test_list"], predictions):
+            for pred_text in zip(batch["test_list"], predictions):
                 gen_code = post_process(pred_text)
                 passed = evaluate_generated_code(gen_code, test_list)
                 correct += int(passed)
