@@ -139,9 +139,9 @@ def main():
     model.eval()
 
     # Step 2: load dataset
-    mbpp = load_dataset("mbpp", split="test")
+    mbpp = load_dataset("mbpp", split="test[11:510]")
     
-    dataset = split_dataset(dataset, local_rank, world_size)
+    dataset = split_dataset(mbpp, local_rank, world_size)
     
     def preprocess(examples):
         #task_ids = [int(task_id.split("/")[-1]) for task_id in examples["task_id"]]
@@ -198,7 +198,7 @@ def main():
 
     
     if dist.get_rank() == 0:
-        print(f"Test samples {len(all_predictions)}")
+        print(f"Test samples {total}")
         accuracy = correct / total
         print(f"\n Final Accuracy (pass@1): {accuracy:.2%}")
         print("optimizer:", config["optimizer"])
