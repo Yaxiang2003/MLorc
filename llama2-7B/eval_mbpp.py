@@ -62,6 +62,17 @@ def post_process(text):
         new_lines.append("    " * indentation_level[space] + line.lstrip())
     return "\n".join(new_lines)
 
+def evaluate_generated_code(generated_code, test_list):
+    """ 执行代码并判断是否通过所有测试用例 """
+    try:
+        local_env = {}
+        exec(generated_code, {}, local_env)
+        for test in test_list:
+            exec(test, {}, local_env)
+        return True
+    except Exception:
+        return False
+
 ALPACA_PREFIX_TEMPLATE_MD = """Below is an instruction that describes a task.\n Write a response that appropriately completes the request.
 
 ### Instruction:
