@@ -164,6 +164,7 @@ def main():
         batch_size=1000,
         num_proc=1,
         desc="Running tokenizer on dataset",
+        remove_columns=["code","test_list","test_setup_code","challenge_test_list"]
     )
 
     dataset = split_dataset(dataset, local_rank, world_size)
