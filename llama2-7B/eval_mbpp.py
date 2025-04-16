@@ -195,13 +195,18 @@ def main():
             for task_id, pred in zip(batch["task_ids"], predictions):
                 pred_text = post_process(pred)
                 all_predictions.append({"task_id": task_id, "gen_code": pred_text})
-            for pred_text in predictions :
-                passed = evaluate_generated_code(gen_code, test_list)
-                correct += int(passed)
 
+    all_predictions = gather_from_all_processes(all_predictions)
     
     if dist.get_rank() == 0:
         print(f"Test samples {total}")
+        for sample in all_predictions:
+            id = sample["task_id"]
+            single_data = mbpp.filter(lambda x: x['task_id'] == id)[0]
+            test_list = single_data["test_list"]
+            passed = evaluate_generated_code(sample["gen_code"], test_list)
+            correct += int(passed)
+            
         accuracy = correct / total
         print(f"\n Final Accuracy (pass@1): {accuracy:.2%}")
         print("optimizer:", config["optimizer"])
