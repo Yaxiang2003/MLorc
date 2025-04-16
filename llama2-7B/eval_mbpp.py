@@ -141,14 +141,12 @@ def main():
     model.eval()
 
     # Step 2: load dataset
-    dataset = read_problems()
-    dataset = [v for (k, v) in dataset.items()]
+    mbpp = load_dataset("mbpp", split="test")
     
     dataset = split_dataset(dataset, local_rank, world_size)
-    dataset = Dataset.from_list(dataset)
     
     def preprocess(examples):
-        task_ids = [int(task_id.split("/")[-1]) for task_id in examples["task_id"]]
+        #task_ids = [int(task_id.split("/")[-1]) for task_id in examples["task_id"]]
         input_texts = [(ALPACA_PREFIX_TEMPLATE_MD.format(PROMPT=prompt) + " ") for prompt in examples["prompt"]]
         
         encodings = tokenizer(input_texts, return_tensors="pt", padding="max_length", truncation=True, max_length=768)
@@ -156,7 +154,8 @@ def main():
         results = {
             "input_ids": encodings["input_ids"],
             "attention_mask": encodings["attention_mask"],
-            "task_ids": task_ids,
+            "test_list": example["test_list"],
+            #"task_ids": task_ids,
         }
         return results
 
@@ -166,7 +165,6 @@ def main():
         batch_size=1000,
         num_proc=1,
         desc="Running tokenizer on dataset",
-        remove_columns=["entry_point", "canonical_solution", "test", "prompt"],
     )
     
     dataloader = DataLoader(dataset, batch_size=8, shuffle=False, collate_fn=default_data_collator)
@@ -175,6 +173,23 @@ def main():
     all_predictions = []
 
     model.eval()
+    correct = 0
+    total = len(mbpp)
+
+for i, sample in enumerate(mbpp):
+    prompt = sample["prompt"]
+    test_list = sample["test_list"]
+    print(f"\n🧪 Sample {i+1}/{total}")
+    print(f"Prompt:\n{prompt}")
+    
+    gen_code = generate_code(prompt)
+    print(f"\n🔢 Generated Code:\n{gen_code}")
+
+    passed = evaluate_generated_code(gen_code, test_list)
+    print(f"✅ Passed: {passed}")
+
+    correct += int(passed)
+
     with torch.no_grad():
         i = 0
         t = tqdm(dataloader) if dist.get_rank() == 0 else dataloader
@@ -191,21 +206,17 @@ def main():
                 temperature=0.1,
             )
             predictions = tokenizer.batch_decode(outputs.sequences[:, 768:], skip_special_tokens=True)
-            pred = []
             for pred_text in predictions:
-                pred.append(post_process(pred_text))
-            for task_id, pred_text in zip(batch["task_ids"], pred):
-                all_predictions.append({"task_id": f"HumanEval/{task_id}", "completion": pred_text})
+                all_predictions.append(post_process(pred_text))
+            
 
-    all_predictions = gather_from_all_processes(all_predictions)
-
+    
     if dist.get_rank() == 0:
         print(f"Test samples {len(all_predictions)}")
-        target_name = f"humaneval_samples_{config['optimizer']}_lr_{config['learning_rate']}.jsonl".replace("/", '_')
-        write_jsonl(target_name, all_predictions)
-        print(f"sample in {target_name}")
-        results = evaluate_functional_correctness(sample_file=target_name)
-        print(f"Pass@1: {results['pass@1']:.3f}")
+        for i, sample in enumerate(mbpp):
+            
+        accuracy = correct / total
+        print(f"\n Final Accuracy (pass@1): {accuracy:.2%}")
         print("optimizer:", config["optimizer"])
         print("lr:", config["learning_rate"])
 
