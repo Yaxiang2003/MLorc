@@ -163,6 +163,8 @@ def main():
             self.optimizer = AdamW(model.parameters(), lr=config["learning_rate"], weight_decay=config["weight_decay"])
         elif config["optimizer"] == "loraplus":
             self.optimizer = create_loraplus_optimizer(model=model, optimizer_cls= optim.AdamW, lr=config["learning_rate"], loraplus_lr_ratio=config["loraplus_lr_ratio"], weight_decay=config["weight_decay"])
+        elif config["optimizer"] == "Lion":
+            self.optimizer = Lion(model.parameters(), lr=config["learning_rate"], betas=(0.95, 0.98), weight_decay=config["weight_decay"])
         else:
             raise RuntimeError("Incorrect optimizer config")
         return self.optimizer
