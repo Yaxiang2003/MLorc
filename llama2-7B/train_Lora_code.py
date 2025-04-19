@@ -7,6 +7,7 @@ import torch
 from torch import Tensor, nn
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
+from lion_pytorch import Lion
 import torch.optim as optim
 
 from datasets import DatasetDict, load_dataset
